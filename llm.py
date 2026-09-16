@@ -9,12 +9,12 @@ from groq import Groq
 
 from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
 
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
 PREFERRED_GROQ_MODELS = (
-    "openai/gpt-oss-20b",
     "llama-3.1-8b-instant",
-    "openai/gpt-oss-120b",
     "llama-3.3-70b-versatile",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
     "qwen/qwen3.8-27b",
 )
 _AVAILABLE_MODEL_IDS: set[str] | None = None
@@ -80,22 +80,32 @@ def _groq_chat(system_prompt: str, user_prompt: str, max_tokens: int = 900) -> s
     try:
         client = Groq(api_key=api_key, timeout=35.0, max_retries=2)
         target_model = _resolve_model(client, configured_model)
-        response = client.chat.completions.create(
-            model=target_model,
-            messages=[
+        request_options = {
+            "model": target_model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2,
-            max_completion_tokens=max_tokens,
-            stream=False,
+            "temperature": 0.2,
+            "max_completion_tokens": max_tokens,
+            "stream": False,
+        }
+        if target_model.startswith("openai/gpt-oss"):
+            request_options["reasoning_effort"] = "low"
+            request_options["max_completion_tokens"] = max(max_tokens, 2000)
+
+        response = client.chat.completions.create(
+            **request_options,
         )
     except Exception as exc:
         raise RuntimeError(f"No fue posible completar la consulta con Groq: {exc}") from exc
 
     if not response.choices:
         raise RuntimeError("Groq respondió sin alternativas de texto.")
-    content = response.choices[0].message.content
+    message = response.choices[0].message
+    content = message.content
+    if not content:
+        content = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError("Groq respondió sin contenido utilizable.")
     return content.strip()
