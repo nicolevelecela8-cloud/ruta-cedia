@@ -1,0 +1,137 @@
+{
+  "route_defs": [
+    {
+      "orden": 1,
+      "etapa": "Descubrir y enfocar",
+      "pregunta": "¿Qué está pasando, para quién y qué problema/oportunidad merece atención?",
+      "objetivo": "Comprender contexto, problema, usuario y señales del entorno antes de saltar a una solución.",
+      "evidencia": "Problema delimitado, contexto, causas, usuario/beneficiario, necesidades e insights.",
+      "mentoria": "Mentoría 1 — Diagnóstico y posicionamiento",
+      "rutas": "Ruta A (principal) / transversal",
+      "criterio": "Existe una situación suficientemente comprendida para decidir qué aprender, idear o validar después."
+    },
+    {
+      "orden": 2,
+      "etapa": "Idear y diseñar",
+      "pregunta": "¿Qué alternativas existen y cómo debería funcionar la solución/experiencia?",
+      "objetivo": "Generar alternativas y traducir necesidades en una solución, requisitos y experiencia inicial.",
+      "evidencia": "Ideas priorizadas, definición funcional, requisitos, escenarios o experiencia del servicio.",
+      "mentoria": "Mentoría 2 — Valorización y brechas",
+      "rutas": "Ruta A / Ruta B",
+      "criterio": "Existe al menos una alternativa/solución suficientemente definida para poder evaluarla."
+    },
+    {
+      "orden": 3,
+      "etapa": "Definir valor y modelo",
+      "pregunta": "¿Para quién crea valor la solución y cómo puede sostenerse o posicionarse?",
+      "objetivo": "Estructurar propuesta de valor, modelo, posicionamiento y lógica de creación/entrega de valor.",
+      "evidencia": "Hipótesis explícitas sobre segmento, valor, modelo, entorno competitivo y posicionamiento.",
+      "mentoria": "Mentoría 2 + Mentoría 3",
+      "rutas": "Ruta B / Ruta C",
+      "criterio": "Las hipótesis de valor y modelo están explícitas y pueden ser probadas o utilizadas para una estrategia de transferencia."
+    },
+    {
+      "orden": 4,
+      "etapa": "Validar y aprender",
+      "pregunta": "¿Qué debe ser cierto y qué evidencia demuestra que vamos por buen camino?",
+      "objetivo": "Priorizar incertidumbres, diseñar pruebas, capturar evidencia y convertirla en decisiones.",
+      "evidencia": "Hipótesis priorizadas, experimento, resultados, aprendizaje y decisión.",
+      "mentoria": "Mentoría 2 — Valorización y brechas",
+      "rutas": "Ruta A / Ruta B / Ruta C",
+      "criterio": "La decisión siguiente está sustentada en evidencia y se conoce qué brecha permanece abierta."
+    },
+    {
+      "orden": 5,
+      "etapa": "Madurar y proteger",
+      "pregunta": "¿Qué falta para que el resultado sea técnicamente más sólido y transferible?",
+      "objetivo": "Cerrar brechas de madurez, ordenar evidencia técnica y gestionar decisiones de propiedad intelectual.",
+      "evidencia": "Plan de maduración, expediente de invención, riesgos preliminares de PI/FTO y evidencia técnica.",
+      "mentoria": "Mentoría 2 + Mentoría 4",
+      "rutas": "Ruta B (principal) / Ruta A",
+      "criterio": "Existe una hoja clara de maduración/protección y se conocen las evidencias necesarias para avanzar."
+    },
+    {
+      "orden": 6,
+      "etapa": "Transferir y conectar",
+      "pregunta": "¿Quién puede usar el resultado, mediante qué mecanismo y con qué actores?",
+      "objetivo": "Preparar la conexión con receptores/aliados, cadena de valor y narrativa de transferencia.",
+      "evidencia": "Mapa de actores/capacidades, mecanismo de transferencia y ficha/pitch del resultado.",
+      "mentoria": "Mentoría 3 + Mentoría 4",
+      "rutas": "Ruta C",
+      "criterio": "Existe un receptor/actor prioritario, mecanismo plausible y evidencia suficiente para iniciar interacción."
+    },
+    {
+      "orden": 7,
+      "etapa": "Adoptar y escalar",
+      "pregunta": "¿Qué barreras pueden impedir que la solución sea adoptada aun cuando funcione?",
+      "objetivo": "Identificar y priorizar riesgos no técnicos de adopción, escalamiento y licencia para operar.",
+      "evidencia": "Mapa de riesgos de adopción con prioridades, responsables y acciones.",
+      "mentoria": "Mentoría 3 + Mentoría 4",
+      "rutas": "Ruta C",
+      "criterio": "Las barreras críticas de adopción tienen evidencia, prioridad y acciones concretas."
+    }
+  ],
+  "stage_by_tool": {
+    "TEN-001": 1,
+    "TEN-002": 1,
+    "TEN-003": 1,
+    "TEN-004": 1,
+    "IDE-001": 1,
+    "IDE-003": 1,
+    "IDE-004": 1,
+    "IDE-005": 1,
+    "IDE-008": 1,
+    "MKT-001": 1,
+    "PRO-001": 1,
+    "PRO-002": 1,
+    "IDE-002": 2,
+    "IDE-006": 2,
+    "IDE-007": 2,
+    "PRO-003": 2,
+    "PRO-004": 2,
+    "PRO-005": 2,
+    "SER-001": 2,
+    "NEG-002": 3,
+    "NEG-001": 3,
+    "MKT-002": 3,
+    "MKT-003": 3,
+    "MKT-004": 3,
+    "PRO-006": 4,
+    "VAL-001": 4,
+    "VAL-002": 4,
+    "VAL-003": 4,
+    "MAD-001": 5,
+    "TRA-003": 5,
+    "TRA-001": 5,
+    "TRA-002": 6,
+    "MKT-005": 6,
+    "ADO-001": 7
+  },
+  "mentoria_primary": {
+    "1": "Mentoría 1 — Diagnóstico y posicionamiento",
+    "2": "Mentoría 2 — Valorización y brechas",
+    "3": "Mentoría 2 / 3 — Valorización + estrategia",
+    "4": "Mentoría 2 — Valorización y brechas",
+    "5": "Mentoría 2 / 4 — Maduración + hoja de ruta",
+    "6": "Mentoría 3 / 4 — Estrategia + hoja de ruta",
+    "7": "Mentoría 3 / 4 — Estrategia + hoja de ruta"
+  },
+  "mentoria_output": {
+    "1": "Ficha de diagnóstico + ubicación dentro de la ruta",
+    "2": "Mapa de resultado y brechas",
+    "3": "Mapa de valorización + hipótesis de transferencia/aplicación",
+    "4": "Evidencia de validación + decisión de siguiente paso",
+    "5": "Acciones de maduración/protección + evidencias requeridas",
+    "6": "Hipótesis de transferencia/aplicación + ficha ejecutiva/pitch",
+    "7": "Hoja de ruta 3–6 meses + riesgos de adopción priorizados"
+  },
+  "route_abc": {
+    "1": "A / transversal",
+    "2": "A / B",
+    "3": "B / C",
+    "4": "A / B / C",
+    "5": "B / A",
+    "6": "C",
+    "7": "C"
+  }
+}
