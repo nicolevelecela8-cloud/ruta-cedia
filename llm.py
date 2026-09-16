@@ -2,10 +2,31 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import urllib.error
 import urllib.request
 from typing import Any, Dict, List
 
 from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
+
+GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_GROQ_MODEL = "qwen/qwen3-32b"
+
+
+def _setting(name: str, default: str = "") -> str:
+    """Lee variables locales o Streamlit Secrets sin exponerlas."""
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+    try:
+        import streamlit as st
+        return str(st.secrets.get(name, default)).strip()
+    except Exception:
+        return default
+
+
+def ai_is_configured() -> bool:
+    return bool(_setting("GROQ_API_KEY"))
 
 
 def _gap_catalog() -> str:
@@ -16,10 +37,12 @@ def _blocker_catalog() -> str:
     return "\n".join(f"- {k}: {v['label']}" for k, v in NON_TOOL_BLOCKERS.items())
 
 
-def _groq_chat(system_prompt: str, user_prompt: str) -> str:
-    """Conexión directa y fluida con el modelo Qwen en la nube de Groq."""
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    target_model = "qwen-2.5-coder-32b" 
+def _groq_chat(system_prompt: str, user_prompt: str, max_tokens: int = 900) -> str:
+    """Conexión compatible con la API de chat de Groq."""
+    api_key = _setting("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("Falta configurar GROQ_API_KEY en Streamlit Secrets.")
+    target_model = _setting("GROQ_MODEL", DEFAULT_GROQ_MODEL)
     
     payload = json.dumps({
         "model": target_model,
@@ -29,11 +52,11 @@ def _groq_chat(system_prompt: str, user_prompt: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 600
+        "max_completion_tokens": max_tokens,
     }).encode("utf-8")
     
     req = urllib.request.Request(
-        "https://groq.com",
+        GROQ_ENDPOINT,
         data=payload,
         headers={
             "Content-Type": "application/json",
@@ -42,11 +65,74 @@ def _groq_chat(system_prompt: str, user_prompt: str) -> str:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=35) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return data.get("choices", [{}]).get("message", {}).get("content", "")
-    except Exception as e:
-        return f"Error de comunicación con la IA en la nube: {str(e)}"
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"Groq respondió HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"No fue posible conectar con Groq: {exc.reason}") from exc
+
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("Groq respondió sin alternativas de texto.")
+    content = choices[0].get("message", {}).get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("Groq respondió sin contenido utilizable.")
+    return content.strip()
+
+
+def _parse_json_object(text: str) -> Dict[str, Any]:
+    cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip(), flags=re.I | re.S)
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("La respuesta no contiene un objeto JSON.")
+    result = json.loads(cleaned[start:end + 1])
+    if not isinstance(result, dict):
+        raise ValueError("La respuesta JSON no es un objeto.")
+    return result
+
+
+def _normalize_diagnosis(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Unifica respuestas nuevas y antiguas con el contrato que usa app.py."""
+    gap_ids = raw.get("possible_gap_ids", raw.get("gaps", []))
+    if isinstance(gap_ids, str):
+        gap_ids = [gap_ids]
+    gap_ids = [gap for gap in (gap_ids or []) if gap in GAPS][:3]
+
+    blocker = raw.get("non_tool_blocker")
+    if blocker not in NON_TOOL_BLOCKERS:
+        blocker = None
+
+    questions = raw.get("questions") or []
+    if isinstance(questions, str):
+        questions = [questions]
+    questions = [str(item).strip() for item in questions if str(item).strip()][:3]
+
+    evidence = raw.get("evidence_detected") or []
+    if isinstance(evidence, str):
+        evidence = [evidence]
+    missing = raw.get("missing_info") or []
+    if isinstance(missing, str):
+        missing = [missing]
+
+    enough = bool(gap_ids or blocker)
+    requires_question = bool(raw.get("requires_question", not enough))
+    if enough:
+        requires_question = False
+        questions = []
+
+    return {
+        "summary": str(raw.get("summary") or raw.get("rationale") or "Análisis completado.").strip(),
+        "objective": str(raw.get("objective") or "Definir el siguiente avance verificable.").strip(),
+        "possible_gap_ids": gap_ids,
+        "non_tool_blocker": blocker,
+        "evidence_detected": [str(item).strip() for item in evidence if str(item).strip()],
+        "missing_info": [str(item).strip() for item in missing if str(item).strip()],
+        "requires_question": requires_question,
+        "questions": questions,
+        "confidence": str(raw.get("confidence") or ("media" if enough else "baja")).lower(),
+    }
 
 
 def diagnose(
@@ -56,8 +142,7 @@ def diagnose(
 ) -> Dict[str, Any]:
     """Capa de interpretación conversacional dinámica con IA funcional."""
     
-    # Si explícitamente se apaga la IA, usamos las reglas fijas básicas
-    if not use_ai:
+    if not use_ai or not ai_is_configured():
         history_text = " ".join(
             m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
         )
@@ -75,7 +160,8 @@ def diagnose(
 
     # 2. Le damos las instrucciones de negocio y el catálogo a la IA
     instructions = f"""
-Eres el asesor experto en innovación de Ruta CEDIA Digital. Tu trabajo es escuchar el proyecto o problema del investigador, entender en qué etapa está y guiarlo de manera intuitiva haciendo preguntas inteligentes y personalizadas en lenguaje natural.
+Eres la capa de interpretación de Ruta CEDIA Innovación. Identifica la necesidad
+actual del proyecto sin inventar evidencia, nivel de madurez, servicios ni resultados.
 
 Para tu conocimiento metodológico, estas son las brechas tecnológicas del programa:
 {_gap_catalog()}
@@ -83,48 +169,92 @@ Para tu conocimiento metodológico, estas son las brechas tecnológicas del prog
 Y estos son los bloqueos externos permitidos:
 {_blocker_catalog()}
 
-REGLAS DE RESPUESTA:
-1. Analiza el mensaje actual del usuario y su historial.
-2. Si el usuario te cuenta una idea temprana o que apenas está haciendo la teoría (como vasos comestibles marinos), no asumas que tiene un prototipo. Hazle preguntas dinámicas creadas por ti en este instante para averiguar qué materiales planea usar, qué pruebas iniciales le gustaría hacer o qué apoyo teórico le falta.
-3. Genera entre 1 y 2 preguntas de guía que sean completamente redactadas por ti, personalizadas para su caso específico.
-4. Para comunicarte con el motor de Streamlit, debes responder EXCLUSIVAMENTE con un objeto JSON plano que tenga este formato exacto (asegúrate de que sea un JSON válido y no pongas introducciones ni saludos fuera del JSON):
+Responde EXCLUSIVAMENTE con un objeto JSON válido con este contrato exacto:
 
 {{
-  "rationale": "Escribe aquí tu análisis corto del proyecto en tiempo real.",
-  "gaps": [],
+  "summary": "Síntesis clara de lo entendido",
+  "objective": "Siguiente resultado que necesita el usuario",
+  "possible_gap_ids": [],
   "non_tool_blocker": null,
-  "questions": ["Escribe aquí tu primera pregunta dinámica personalizada", "Escribe aquí tu segunda pregunta dinámica personalizada (opcional)"]
+  "evidence_detected": [],
+  "missing_info": [],
+  "requires_question": true,
+  "questions": [],
+  "confidence": "alta|media|baja"
 }}
+
+Si hay información suficiente, selecciona como máximo tres identificadores permitidos
+o un bloqueo y usa requires_question=false. Si falta información, no adivines: deja
+las brechas vacías, usa requires_question=true y formula de una a tres preguntas
+específicas. No agregues saludos ni texto fuera del JSON.
 """
 
     user_prompt = f"HISTORIAL DE CONVERSACIÓN anterior:\n{history}\n\nÚLTIMO MENSAJE EN VIVO DEL INVESTIGADOR:\n{latest_user_text}"
 
     try:
-        # Llamamos a Qwen en la nube
-        ai_response = _groq_chat(instructions, user_prompt).strip()
-        
-        # Limpieza de seguridad por si la IA pone bloques de código markdown
-        if ai_response.startswith("```"):
-            ai_response = ai_response.strip("`")
-            if ai_response.lower().startswith("json"):
-                ai_response = ai_response[4:].strip()
-        
-        start = ai_response.find("{")
-        end = ai_response.rfind("}")
-        if start >= 0 and end > start:
-            ai_response = ai_response[start:end + 1]
-            
-        parsed = json.loads(ai_response)
-        return parsed
+        return _normalize_diagnosis(_parse_json_object(_groq_chat(instructions, user_prompt)))
+    except Exception as exc:
+        history_text = " ".join(
+            m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
+        )
+        fallback = heuristic_diagnosis(latest_user_text, history_text)
+        fallback["_ai_error"] = str(exc)
+        return fallback
 
-    except Exception as e:
-        # Si la red o el JSON fallan por completo, devolvemos un formato básico con una pregunta dinámica de emergencia
+
+def coach_tool(
+    tool_id: str,
+    tool_name: str,
+    field_label: str,
+    value: str,
+    answers: Dict[str, Any],
+    purpose: str,
+    steps: str,
+    use_ai: bool = True,
+) -> Dict[str, str]:
+    """Revisa un campo sin inventar información del proyecto."""
+    if not value.strip():
         return {
-            "rationale": "Análisis conversacional activo.",
-            "gaps": [],
-            "non_tool_blocker": None,
-            "questions": [f"Interesante propuesta sobre tu proyecto. Cuéntame más detalles: ¿qué pasos has imaginado para avanzar desde el punto actual?"]
+            "quality": "Incompleto",
+            "feedback": "Este campo todavía está vacío.",
+            "missing": "Escribe información real y verificable de tu proyecto.",
+            "example": "",
+        }
+    if not use_ai or not ai_is_configured():
+        return {
+            "quality": "Revisión básica",
+            "feedback": "El campo contiene información, pero requiere revisión metodológica.",
+            "missing": "Comprueba que sea específico, verificable y coherente con el propósito de la herramienta.",
+            "example": "",
         }
 
-def coach_tool(*args, **kwargs) -> Any:
-    return {}
+    system_prompt = """
+Eres un revisor metodológico de Ruta CEDIA. Evalúa el campo sin inventar datos ni
+convertir ejemplos en hechos. Responde solo JSON válido con las claves quality,
+feedback, missing y example. El ejemplo debe identificarse como ilustrativo.
+"""
+    user_prompt = json.dumps({
+        "tool_id": tool_id,
+        "tool_name": tool_name,
+        "purpose": purpose,
+        "steps": steps,
+        "field": field_label,
+        "field_value": value,
+        "other_answers": answers,
+    }, ensure_ascii=False)
+    try:
+        raw = _parse_json_object(_groq_chat(system_prompt, user_prompt, max_tokens=500))
+        return {
+            "quality": str(raw.get("quality") or "Por revisar"),
+            "feedback": str(raw.get("feedback") or "No se recibió retroalimentación suficiente."),
+            "missing": str(raw.get("missing") or ""),
+            "example": str(raw.get("example") or ""),
+        }
+    except Exception as exc:
+        return {
+            "quality": "Revisión no disponible",
+            "feedback": "La IA no pudo revisar este campo en este momento.",
+            "missing": "Conserva tu respuesta y vuelve a intentarlo.",
+            "example": "",
+            "_ai_error": str(exc),
+        }
