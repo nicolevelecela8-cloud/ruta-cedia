@@ -207,6 +207,11 @@ def _project_backup_payload():
     }
 
 def sidebar():
+    # Líneas mágicas para mostrar el logo institucional de CEDIA arriba del menú
+    if os.path.exists("logocedia.png"):
+        st.sidebar.image("logocedia.png", use_container_width=True)
+        st.sidebar.markdown("<br>", unsafe_allow_html=True)
+
     requested_slug = st.query_params.get("page")
     if requested_slug in SLUG_TO_PAGE and "nav_page" not in st.session_state:
         st.session_state.nav_page = SLUG_TO_PAGE[requested_slug]
@@ -225,14 +230,16 @@ def sidebar():
     st.sidebar.divider()
     local_model = os.getenv("OLLAMA_MODEL", "").strip()
     st.sidebar.markdown("**Modo de diagnóstico**")
+    
     if local_model:
-        st.sidebar.success(f"IA local: {local_model}")
-        st.sidebar.caption("La conversación se procesa en tu computador mediante localhost.")
-        use_ai = st.sidebar.toggle("Usar IA local", value=True)
+        st.sidebar.success("IA en la nube activa: Groq")
+        st.sidebar.caption("La conversación se procesa de forma segura a través de los servidores institucionales.")
+        use_ai = st.sidebar.toggle("Usar IA activa", value=True)
     else:
         st.sidebar.warning("Motor local DEMO")
-        st.sidebar.caption("Funciona sin internet. Puedes activar un modelo local con Ollama cuando quieras.")
+        st.sidebar.caption("Para activar el motor de IA completo, configura las credenciales correspondientes.")
         use_ai = False
+        
     return page, use_ai
 
 page, use_ai = sidebar()
