@@ -1,0 +1,7 @@
+[theme]
+primaryColor = "#0066FF"       # Azul brillante de acento de CEDIA
+backgroundColor = "#F4F6F9"    # Fondo gris claro muy suave para celular
+secondaryBackgroundColor = "#001F5C" # Azul marino institucional de CEDIA para los cuadros
+textColor = "#FFFFFF"          # El texto se mantendrá blanco sobre los cuadros oscuros
+font = "sans serif"
+
