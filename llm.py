@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from groq import Groq
 
-from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
+from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis, normalize
 
 DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
 PREFERRED_GROQ_MODELS = (
@@ -164,6 +164,35 @@ def _normalize_diagnosis(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _apply_methodological_guardrails(result: Dict[str, Any], conversation: str) -> Dict[str, Any]:
+    """Evita recomendaciones incompatibles con el estado y resultado buscado."""
+    text = normalize(conversation)
+    prototype_goal = any(cue in text for cue in (
+        "primer prototipo", "crear el primer", "hacer el primer", "construir el primer",
+        "fabricar el primer", "estoy en concepto", "fase de concepto", "etapa de concepto",
+        "necesito crear", "quiero crear un prototipo",
+    ))
+    explicit_financial_block = any(cue in text for cue in (
+        "no tengo presupuesto", "sin presupuesto", "no hay presupuesto",
+        "no tengo financiamiento", "necesito financiamiento",
+    ))
+
+    # Si existe una solución definida y el resultado inmediato es construir el primer
+    # prototipo, primero se especifica qué debe cumplir. No se regresa artificialmente
+    # al Árbol de Problemas ni se convierte una mención vaga de recursos en financiamiento.
+    if prototype_goal and not explicit_financial_block:
+        result["possible_gap_ids"] = ["B-SOL-002"]
+        result["non_tool_blocker"] = None
+        result["objective"] = (
+            "Definir los requisitos funcionales, constructivos y de seguridad que orientarán "
+            "el diseño del primer prototipo."
+        )
+        result["requires_question"] = False
+        result["questions"] = []
+        result["confidence"] = "alta" if "prototipo" in text else "media"
+    return result
+
+
 def diagnose(
     latest_user_text: str,
     chat_history: List[Dict[str, str]],
@@ -231,6 +260,12 @@ REGLAS DE CONTINUIDAD:
 - Nunca repitas una pregunta que ya fue formulada o respondida.
 - Solo se permite una ronda de aclaración. Después de recibir la respuesta del usuario,
   debes seleccionar la brecha o bloqueo mejor sustentado y usar requires_question=false.
+- Usa B-PRO-001 únicamente cuando el problema central, sus causas y sus efectos sean la
+  necesidad explícita. No lo uses como categoría genérica por falta de información.
+- Si existe una solución concreta, está en concepto y el usuario quiere construir su primer
+  prototipo, prioriza B-SOL-002 para definir los requisitos de la solución.
+- No clasifiques "recursos" como financiamiento salvo que el usuario exprese claramente
+  falta de presupuesto o necesidad de fondos.
 """
 
     followup_note = (
@@ -256,7 +291,8 @@ REGLAS DE CONTINUIDAD:
             result = _normalize_diagnosis(
                 _parse_json_object(_groq_chat(instructions, closing_prompt))
             )
-        return result
+        full_conversation = history + "\nUSER: " + latest_user_text
+        return _apply_methodological_guardrails(result, full_conversation)
     except Exception as exc:
         history_text = " ".join(
             m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
