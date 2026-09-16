@@ -1,0 +1,14 @@
+ACTIVAR IA LOCAL (OPCIONAL)
+
+Ruta CEDIA funciona sin internet en modo DEMO local.
+Si quieres interpretación más conversacional SIN subir datos a la nube, puedes usar un modelo local con Ollama.
+
+1. Instala Ollama en tu computador desde su sitio oficial.
+2. Descarga un modelo compatible desde Ollama.
+3. Copia .env.example y renómbralo a .env
+4. Escribe el nombre exacto del modelo, por ejemplo:
+   OLLAMA_MODEL=<nombre-del-modelo-local>
+5. Inicia Ollama y luego ejecuta INICIAR_RUTA_CEDIA.bat
+
+La app se conecta únicamente a http://127.0.0.1:11434 (tu propio computador).
+Si OLLAMA_MODEL está vacío, usa el clasificador DEMO local.
