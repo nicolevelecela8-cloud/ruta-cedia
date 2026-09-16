@@ -1,92 +1,88 @@
 APP_CSS = """
 <style>
+    /* Fondo general de la app (Gris azulado ultra claro, descansa la vista) */
     .stApp { background: #F4F6F9; }
-    .block-container { max-width: 1180px; padding-top: 2rem; padding-bottom: 3rem; }
-    h1, h2, h3 { letter-spacing: -0.02em; color: #001F5C !important; }
+    .block-container { max-width: 1180px; padding-top: 1.5rem; padding-bottom: 3rem; }
     
-    /* Forzar a que los textos normales de la página sean oscuros y legibles */
-    p, span, label, .smallmuted { color: #1E293B !important; }
+    /* Títulos principales en Azul Marino de CEDIA */
+    h1, h2, h3 { letter-spacing: -0.02em; color: #001F5C !important; font-weight: 700; }
     
+    /* Textos normales en gris oscuro nítido (Legible en celulares) */
+    p, span, label, .smallmuted { color: #334155 !important; font-size: 1rem; }
+    
+    /* Banner de bienvenida (Degradado premium y suave) */
     .hero {
-        background: linear-gradient(135deg, #001F5C 0%, #0066FF 100%);
+        background: linear-gradient(135deg, #001F5C 0%, #0044CC 100%);
         color: white;
-        padding: 34px 38px;
-        border-radius: 24px;
+        padding: 30px 35px;
+        border-radius: 20px;
         margin-bottom: 24px;
-        box-shadow: 0 12px 32px rgba(0,22,92,.16);
+        box-shadow: 0 10px 25px rgba(0,31,92,0.1);
     }
-    .hero h1 { color:white !important; margin:0 0 8px 0; font-size:2.25rem; }
-    .hero p { color:#F2F3FB !important; font-size:1.05rem; max-width:850px; margin:0; }
+    .hero h1 { color: white !important; margin: 0 0 8px 0; font-size: 2.1rem; }
+    .hero p { color: #E2E8F0 !important; font-size: 1.05rem; max-width: 850px; margin: 0; }
     
-    /* Cuadros principales de CEDIA */
+    /* Tarjetas en AZUL CIELO PASTEL (Adictivas y suaves al ojo) */
     .card {
-        background: #001F5C !important;
-        border: 1px solid #0066FF;
-        border-radius: 18px;
-        padding: 20px;
-        min-height: 150px;
-        box-shadow: 0 6px 18px rgba(0,0,0,.15);
+        background: #EBF4FF !important; /* Azul pastel suave */
+        border: 1px solid #BFDBFE;       /* Borde sutil */
+        border-radius: 20px;
+        padding: 22px;
+        min-height: 160px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
         margin-bottom: 14px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .card * { color: white !important; }
+    /* Efecto flotante al pasar el mouse */
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,102,255,0.08);
+    }
+    .card h3 { color: #001F5C !important; margin-top: 0; font-size: 1.3rem; }
+    .card p { color: #1E293B !important; font-size: 0.95rem; line-height: 1.5; }
     
-    /* Ajuste definitivo para los botones de Streamlit bajo los cuadros */
+    /* Botones de acción inferiores (Azul brillante interactivo) */
     div.stButton > button {
         background-color: #0066FF !important;
         color: white !important;
         border: none !important;
-        border-radius: 10px !important;
-        padding: 8px 16px !important;
-        font-weight: bold !important;
+        border-radius: 12px !important;
+        padding: 10px 20px !important;
+        font-weight: 600 !important;
         width: 100% !important;
-        box-shadow: 0 4px 10px rgba(0, 102, 255, 0.2) !important;
+        box-shadow: 0 4px 12px rgba(0, 102, 255, 0.15) !important;
+        transition: all 0.2s ease;
     }
     div.stButton > button:hover {
         background-color: #001F5C !important;
-        color: white !important;
+        box-shadow: 0 6px 16px rgba(0, 31, 92, 0.25) !important;
     }
     
-    .pill {
-        display: inline-block;
-        padding: 5px 10px;
-        border-radius: 999px;
-        background: #0066FF;
-        color: white !important;
-        font-size: .78rem;
-        font-weight: 700;
-        margin-bottom: 8px;
-    }
+    /* Alertas y notas suaves */
     .note {
-        background: #fff7da;
-        border-left: 4px solid #d5a21b;
+        background: #FEF3C7;
+        border-left: 4px solid #D97706;
         padding: 12px 14px;
-        border-radius: 10px;
+        border-radius: 12px;
         margin: 12px 0;
     }
-    .note * { color: #1E293B !important; }
+    .note * { color: #78350F !important; }
     
     .successbox {
-        background: #edf8f1;
-        border-left: 4px solid #2f855a;
+        background: #DCFCE7;
+        border-left: 4px solid #16A34A;
         padding: 14px 16px;
-        border-radius: 10px;
+        border-radius: 12px;
         margin: 10px 0;
     }
-    .successbox * { color: #1E293B !important; }
+    .successbox * { color: #14532D !important; }
     
-    .resultbox {
-        background: #001F5C !important;
-        border: 1px solid #0066FF;
-        border-radius: 18px;
-        padding: 22px;
-        margin-top: 12px;
-        box-shadow: 0 6px 18px rgba(0,0,0,.15);
+    /* Menú lateral izquierdo (Blanco limpio y espacioso) */
+    div[data-testid="stSidebar"] { 
+        background: #FFFFFF !important; 
+        border-right: 1px solid #E2E8F0;
     }
-    .resultbox * { color: white !important; }
-    
-    /* Menú lateral */
-    div[data-testid="stSidebar"] { background: #001F5C; }
-    div[data-testid="stSidebar"] * { color: white !important; }
-    div[data-testid="stSidebar"] .stRadio label { color: white !important; }
+    div[data-testid="stSidebar"] * { color: #001F5C !important; }
+    div[data-testid="stSidebar"] .stRadio label { color: #1E293B !important; font-weight: 500; }
 </style>
 """
