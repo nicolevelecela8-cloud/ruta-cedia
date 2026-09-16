@@ -186,6 +186,12 @@ def diagnose(
         f"{m.get('role','user').upper()}: {m.get('content','')}"
         for m in recent_history
     )
+    prior_clarifications = [
+        m.get("content", "") for m in recent_history
+        if m.get("role") == "assistant"
+        and ("Para orientarte mejor" in m.get("content", "") or "?" in m.get("content", ""))
+    ]
+    is_followup_answer = bool(prior_clarifications)
 
     # 2. Le damos las instrucciones de negocio y el catálogo a la IA
     instructions = f"""
@@ -216,12 +222,41 @@ Si hay información suficiente, selecciona como máximo tres identificadores per
 o un bloqueo y usa requires_question=false. Si falta información, no adivines: deja
 las brechas vacías, usa requires_question=true y formula de una a tres preguntas
 específicas. No agregues saludos ni texto fuera del JSON.
+
+REGLAS DE CONTINUIDAD:
+- Lee el historial como una sola conversación acumulativa.
+- El mensaje actual puede ser la respuesta a la última pregunta del asistente; no lo
+  analices como si fuera un proyecto nuevo.
+- Incorpora las respuestas anteriores en evidence_detected y en la decisión.
+- Nunca repitas una pregunta que ya fue formulada o respondida.
+- Solo se permite una ronda de aclaración. Después de recibir la respuesta del usuario,
+  debes seleccionar la brecha o bloqueo mejor sustentado y usar requires_question=false.
 """
 
-    user_prompt = f"HISTORIAL DE CONVERSACIÓN anterior:\n{history}\n\nÚLTIMO MENSAJE EN VIVO DEL INVESTIGADOR:\n{latest_user_text}"
+    followup_note = (
+        "Este mensaje ES una respuesta a preguntas previas. Cierra el diagnóstico ahora; "
+        "no hagas nuevas preguntas ni repitas las anteriores."
+        if is_followup_answer else
+        "Este es el primer mensaje sustantivo del diagnóstico."
+    )
+    user_prompt = (
+        f"HISTORIAL DE CONVERSACIÓN anterior:\n{history}\n\n"
+        f"ESTADO DE LA CONVERSACIÓN:\n{followup_note}\n\n"
+        f"ÚLTIMO MENSAJE EN VIVO DEL INVESTIGADOR:\n{latest_user_text}"
+    )
 
     try:
-        return _normalize_diagnosis(_parse_json_object(_groq_chat(instructions, user_prompt)))
+        result = _normalize_diagnosis(_parse_json_object(_groq_chat(instructions, user_prompt)))
+        if is_followup_answer and result["requires_question"]:
+            closing_prompt = user_prompt + (
+                "\n\nINSTRUCCIÓN FINAL OBLIGATORIA: ya hubo aclaración. Devuelve ahora una "
+                "clasificación prudente con el identificador mejor sustentado o un bloqueo "
+                "permitido. requires_question debe ser false y questions debe ser []."
+            )
+            result = _normalize_diagnosis(
+                _parse_json_object(_groq_chat(instructions, closing_prompt))
+            )
+        return result
     except Exception as exc:
         history_text = " ".join(
             m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
