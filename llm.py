@@ -8,18 +8,6 @@ from typing import Any, Dict, List
 from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
 
 
-def _extract_json(text: str) -> Dict[str, Any]:
-    text = (text or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start >= 0 and end > start:
-        text = text[start:end + 1]
-    return json.loads(text)
-
-
 def _gap_catalog() -> str:
     return "\n".join(f"- {k}: {v.get('NOMBRE_BRECHA')}" for k, v in GAPS.items())
 
@@ -28,24 +16,20 @@ def _blocker_catalog() -> str:
     return "\n".join(f"- {k}: {v['label']}" for k, v in NON_TOOL_BLOCKERS.items())
 
 
-def _groq_chat(model: str, system_prompt: str, user_prompt: str) -> str:
-    # Intenta leer la clave desde los Secrets seguros de Streamlit o del entorno
+def _groq_chat(system_prompt: str, user_prompt: str) -> str:
+    """Conexión directa y fluida con el modelo Qwen en la nube de Groq."""
     api_key = os.getenv("GROQ_API_KEY", "").strip()
-    
-    # Si no hay clave, usamos el modelo por defecto de Groq (Llama de Meta)
-    # Puedes cambiar "llama3-8b-8192" por "qwen-2.5-coder-32b" si está disponible en tu plan de Groq
-    target_model = "llama3-8b-8192" 
+    target_model = "qwen-2.5-coder-32b" 
     
     payload = json.dumps({
         "model": target_model,
         "stream": False,
-        "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.0,
-        "max_tokens": 320
+        "temperature": 0.3,
+        "max_tokens": 600
     }).encode("utf-8")
     
     req = urllib.request.Request(
@@ -60,156 +44,87 @@ def _groq_chat(model: str, system_prompt: str, user_prompt: str) -> str:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return data.get("choices", [{}]).get("message", {}).get("content", "")
     except Exception as e:
-        return json.dumps({"error": f"Error de conexión a la nube: {str(e)}"})
+        return f"Error de comunicación con la IA en la nube: {str(e)}"
 
-
-def _simple_question_plan(latest_user_text: str, chat_history: List[Dict[str, str]]) -> List[str]:
-    """Plan de preguntas concreto para evitar que un modelo pequeño pida al usuario diseñar la metodología."""
-    text = " ".join(
-        [m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"]
-        + [latest_user_text]
-    ).lower()
-
-    # Etapa de idea temprana
-    early_idea = any(x in text for x in [
-        "tengo la idea", "solo tengo la idea", "es una idea", "idea de una investig", "quiero investigar",
-        "se me ocurrio", "se me ocurrió", "aun es una idea", "aún es una idea"
-    ]) and not any(x in text for x in [
-        "prototipo", "prueba de laboratorio", "probé", "probe", "ensayo", "piloto", "modelo funcional"
-    ])
-    if early_idea:
-        return [
-            "¿Por ahora tienes solo la idea, o ya existe algo concreto como un material, formulación, diseño, cálculo, prototipo o prueba?",
-            "¿Qué quieres conseguir primero: definir mejor el problema de investigación, comprobar si la idea podría ser técnicamente viable o preparar una primera prueba?",
-        ]
-
-    # Ya existe algo construido
-    technical_validation = any(x in text for x in [
-        "no sabe si funciona", "no saben si funciona", "no sabe si funcionara", "no sabe si funcionará",
-        "funcionara en condiciones reales", "funcionará en condiciones reales", "solo laboratorio",
-        "prototipo", "validar en condiciones reales", "no lo he probado", "no se si funciona", "no sé si funciona"
-    ])
-    if technical_validation:
-        return [
-            "¿En qué condiciones reales se usaría la solución y qué cambia respecto de la prueba que ya hiciste?",
-            "¿Qué aspecto necesitas comprobar primero: desempeño técnico, resistencia/estabilidad, seguridad, aceptación del usuario u otro?",
-        ]
-
-    # Señales de mercado/usuario
-    user_validation = any(x in text for x in [
-        "cliente", "usuario", "empresa", "mercado", "no lo quiere", "no les interesa", "no comprarían", "no comprarian"
-    ])
-    if user_validation:
-        return [
-            "¿Con quién has hablado o probado la propuesta hasta ahora y qué te dijeron exactamente?",
-            "¿Qué decision quieres tomar con esa información: entender la necesidad, ajustar la solución o comprobar intención de uso/compra?",
-        ]
-
-    return [
-        "¿Qué tienes hoy de forma concreta: solo una idea, un documento, un diseño, un prototipo, resultados de prueba u otra evidencia?",
-        "¿Cuál es el siguiente resultado que quieres conseguir con el proyecto?",
-    ]
-
-
-def _questions_are_too_methodological(questions: List[str]) -> bool:
-    joined = " ".join(questions or []).lower()
-    bad_cues = [
-        "qué pruebas de campo deberían", "que pruebas de campo deberian",
-        "cuáles son las causas específicas", "cuales son las causas especificas",
-        "qué aspectos de la investigación no han sido explorados", "que aspectos de la investigacion no han sido explorados",
-        "qué preguntas generaría", "que preguntas generaria",
-        "qué metodología", "que metodologia", "qué herramienta", "que herramienta",
-        "qué estrategia debería", "que estrategia deberia", "diseña", "diseñar la prueba"
-    ]
-    return any(cue in joined for cue in bad_cues)
-
-
-def _sanitize_evidence(evidence: List[str], latest_user_text: str) -> List[str]:
-    """Evita llamar evidencia a una idea o intención declarada."""
-    out: List[str] = []
-    for item in evidence or []:
-        low = str(item).lower().strip()
-        if not low:
-            continue
-        if any(cue in low for cue in ["tiene una idea", "idea de", "quiere investigar", "busca desarrollar", "pretende"]):
-            continue
-        out.append(str(item).strip())
-    return out[:4]
 
 def diagnose(
     latest_user_text: str,
     chat_history: List[Dict[str, str]],
     use_ai: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Capa de interpretación conversacional adaptada para la nube con Groq.
-    """
-    # Forzamos a True en la nube para activar la IA funcional
-    model = "groq"
-
+    """Capa de interpretación conversacional dinámica con IA funcional."""
+    
+    # Si explícitamente se apaga la IA, usamos las reglas fijas básicas
     if not use_ai:
         history_text = " ".join(
             m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
         )
         return heuristic_diagnosis(latest_user_text, history_text)
 
-    try:
-        recent_history = list(chat_history[-10:])
-        if recent_history and recent_history[-1].get("role") == "user" and recent_history[-1].get("content", "").strip() == latest_user_text.strip():
-            recent_history = recent_history[:-1]
-        history = "\n".join(
-            f"{m.get('role','user').upper()}: {m.get('content','')}"
-            for m in recent_history
-        )
+    # 1. Recuperamos el historial para que la IA tenga memoria de la conversación
+    recent_history = list(chat_history[-8:])
+    if recent_history and recent_history[-1].get("role") == "user" and recent_history[-1].get("content", "").strip() == latest_user_text.strip():
+        recent_history = recent_history[:-1]
+        
+    history = "\n".join(
+        f"{m.get('role','user').upper()}: {m.get('content','')}"
+        for m in recent_history
+    )
 
-        instructions = f"""
-Eres la capa de INTERPRETACIÓN CONVERSACIONAL de Ruta CEDIA Digital.
-NO recomiendes herramientas. NO asignes TRL/CRL. NO inventes criterios CEDIA.
-Tu trabajo es traducir lenguaje natural de investigadores a:
-(a) una o varias brechas conocidas, o
-(b) un bloqueo que no debe forzarse a una herramienta.
+    # 2. Le damos las instrucciones de negocio y el catálogo a la IA
+    instructions = f"""
+Eres el asesor experto en innovación de Ruta CEDIA Digital. Tu trabajo es escuchar el proyecto o problema del investigador, entender en qué etapa está y guiarlo de manera intuitiva haciendo preguntas inteligentes y personalizadas en lenguaje natural.
 
-BRECHAS PERMITIDAS:
+Para tu conocimiento metodológico, estas son las brechas tecnológicas del programa:
 {_gap_catalog()}
 
-BLOQUEOS NO-HERRAMIENTA PERMITIDOS:
+Y estos son los bloqueos externos permitidos:
 {_blocker_catalog()}
 
-Reglas:
-1. Si el usuario solo dice "me bloqueé/no sé qué hacer", pregunta antes de clasificar.
-2. Si no sabe si la solución funciona o necesita demostrar funcionamiento, prioriza el bloqueo de validación técnica; el motor decidirá si una Test Card puede ayudar como soporte.
-3. Si el problema es presupuesto, usa non_tool_blocker="financiamiento".
-4. No conviertas automáticamente todo problema en una de las 34 herramientas.
-5. Haz entre 1 y 2 preguntas si falta información. Pregunta una cosa concreta por pregunta.
-6. Las preguntas de aclaración deben pedir HECHOS que el usuario pueda conocer o describir: qué existe, qué se probó, en qué condiciones, qué resultado obtuvo, qué quiere conseguir, qué comentó la empresa/usuario o qué documentación tiene.
-7. NO le preguntes al usuario que diseñe la solución metodológica que precisamente está buscando.
-Retorna UNICAMENTE un objeto JSON con este formato:
-{{"rationale": "razonamiento", "gaps": ["ID_BRECHA"], "non_tool_blocker": "ID_BLOQUEO o null", "questions": ["pregunta1"]}}
+REGLAS DE RESPUESTA:
+1. Analiza el mensaje actual del usuario y su historial.
+2. Si el usuario te cuenta una idea temprana o que apenas está haciendo la teoría (como vasos comestibles marinos), no asumas que tiene un prototipo. Hazle preguntas dinámicas creadas por ti en este instante para averiguar qué materiales planea usar, qué pruebas iniciales le gustaría hacer o qué apoyo teórico le falta.
+3. Genera entre 1 y 2 preguntas de guía que sean completamente redactadas por ti, personalizadas para su caso específico.
+4. Para comunicarte con el motor de Streamlit, debes responder EXCLUSIVAMENTE con un objeto JSON plano que tenga este formato exacto (asegúrate de que sea un JSON válido y no pongas introducciones ni saludos fuera del JSON):
+
+{{
+  "rationale": "Escribe aquí tu análisis corto del proyecto en tiempo real.",
+  "gaps": [],
+  "non_tool_blocker": null,
+  "questions": ["Escribe aquí tu primera pregunta dinámica personalizada", "Escribe aquí tu segunda pregunta dinámica personalizada (opcional)"]
+}}
 """
 
-        user_prompt = f"HISTORIAL DE CONVERSACIÓN:\n{history}\n\nÚLTIMO MENSAJE DEL USUARIO:\n{latest_user_text}"
+    user_prompt = f"HISTORIAL DE CONVERSACIÓN anterior:\n{history}\n\nÚLTIMO MENSAJE EN VIVO DEL INVESTIGADOR:\n{latest_user_text}"
+
+    try:
+        # Llamamos a Qwen en la nube
+        ai_response = _groq_chat(instructions, user_prompt).strip()
         
-        # Llamamos a nuestra nueva función de la nube
-        ai_response = _groq_chat(model, instructions, user_prompt)
+        # Limpieza de seguridad por si la IA pone bloques de código markdown
+        if ai_response.startswith("```"):
+            ai_response = ai_response.strip("`")
+            if ai_response.lower().startswith("json"):
+                ai_response = ai_response[4:].strip()
         
-        parsed = _extract_json(ai_response)
-        
-        # Validaciones de seguridad para mantener la lógica original del motor
-        if _questions_are_too_methodological(parsed.get("questions", [])):
-            parsed["questions"] = _simple_question_plan(latest_user_text, chat_history)
+        start = ai_response.find("{")
+        end = ai_response.rfind("}")
+        if start >= 0 and end > start:
+            ai_response = ai_response[start:end + 1]
             
-        parsed["evidence"] = _sanitize_evidence(parsed.get("evidence", []), latest_user_text)
+        parsed = json.loads(ai_response)
         return parsed
 
-    except Exception:
-        history_text = " ".join(
-            m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
-        )
-        return heuristic_diagnosis(latest_user_text, history_text)
-        
-def coach_tool(*args, **kwargs) -> Any:
-    """Función de soporte temporal para compatibilidad con app.py"""
-    return {}
+    except Exception as e:
+        # Si la red o el JSON fallan por completo, devolvemos un formato básico con una pregunta dinámica de emergencia
+        return {
+            "rationale": "Análisis conversacional activo.",
+            "gaps": [],
+            "non_tool_blocker": None,
+            "questions": [f"Interesante propuesta sobre tu proyecto. Cuéntame más detalles: ¿qué pasos has imaginado para avanzar desde el punto actual?"]
+        }
 
+def coach_tool(*args, **kwargs) -> Any:
+    return {}
