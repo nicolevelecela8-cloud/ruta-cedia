@@ -3,6 +3,10 @@ APP_CSS = """
     .stApp { background: #F4F6F9; }
     .block-container { max-width: 1180px; padding-top: 2rem; padding-bottom: 3rem; }
     h1, h2, h3 { letter-spacing: -0.02em; color: #001F5C !important; }
+    
+    /* Forzar a que los textos normales de la página sean oscuros y legibles */
+    p, span, label, .smallmuted { color: #1E293B !important; }
+    
     .hero {
         background: linear-gradient(135deg, #001F5C 0%, #0066FF 100%);
         color: white;
@@ -12,9 +16,9 @@ APP_CSS = """
         box-shadow: 0 12px 32px rgba(0,22,92,.16);
     }
     .hero h1 { color:white !important; margin:0 0 8px 0; font-size:2.25rem; }
-    .hero p { color:#F2F3FB; font-size:1.05rem; max-width:850px; margin:0; }
+    .hero p { color:#F2F3FB !important; font-size:1.05rem; max-width:850px; margin:0; }
     
-    /* Cuadros transformados al Azul Corporativo de CEDIA */
+    /* Cuadros principales de CEDIA */
     .card {
         background: #001F5C !important;
         border: 1px solid #0066FF;
@@ -25,6 +29,22 @@ APP_CSS = """
         margin-bottom: 14px;
     }
     .card * { color: white !important; }
+    
+    /* Ajuste definitivo para los botones de Streamlit bajo los cuadros */
+    div.stButton > button {
+        background-color: #0066FF !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 8px 16px !important;
+        font-weight: bold !important;
+        width: 100% !important;
+        box-shadow: 0 4px 10px rgba(0, 102, 255, 0.2) !important;
+    }
+    div.stButton > button:hover {
+        background-color: #001F5C !important;
+        color: white !important;
+    }
     
     .pill {
         display: inline-block;
@@ -42,7 +62,6 @@ APP_CSS = """
         padding: 12px 14px;
         border-radius: 10px;
         margin: 12px 0;
-        color: #1E293B !important;
     }
     .note * { color: #1E293B !important; }
     
@@ -52,11 +71,9 @@ APP_CSS = """
         padding: 14px 16px;
         border-radius: 10px;
         margin: 10px 0;
-        color: #1E293B !important;
     }
     .successbox * { color: #1E293B !important; }
     
-    /* Cuadro de resultados adaptado */
     .resultbox {
         background: #001F5C !important;
         border: 1px solid #0066FF;
@@ -67,9 +84,7 @@ APP_CSS = """
     }
     .resultbox * { color: white !important; }
     
-    .smallmuted { color: #6b7280; font-size: .88rem; }
-    
-    /* Menú lateral izquierdo con la identidad de CEDIA */
+    /* Menú lateral */
     div[data-testid="stSidebar"] { background: #001F5C; }
     div[data-testid="stSidebar"] * { color: white !important; }
     div[data-testid="stSidebar"] .stRadio label { color: white !important; }
