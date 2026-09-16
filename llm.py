@@ -9,7 +9,15 @@ from groq import Groq
 
 from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
 
-DEFAULT_GROQ_MODEL = "qwen/qwen3-32b"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+PREFERRED_GROQ_MODELS = (
+    "openai/gpt-oss-20b",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "qwen/qwen3.8-27b",
+)
+_AVAILABLE_MODEL_IDS: set[str] | None = None
 
 
 def _setting(name: str, default: str = "") -> str:
@@ -36,15 +44,42 @@ def _blocker_catalog() -> str:
     return "\n".join(f"- {k}: {v['label']}" for k, v in NON_TOOL_BLOCKERS.items())
 
 
+def _resolve_model(client: Groq, configured_model: str) -> str:
+    """Usa el modelo configurado si la clave tiene acceso; si no, elige uno disponible."""
+    global _AVAILABLE_MODEL_IDS
+    if _AVAILABLE_MODEL_IDS is None:
+        response = client.models.list()
+        _AVAILABLE_MODEL_IDS = {
+            item.id for item in response.data
+            if getattr(item, "id", None) and getattr(item, "active", True)
+        }
+
+    if configured_model in _AVAILABLE_MODEL_IDS:
+        return configured_model
+    for model_id in PREFERRED_GROQ_MODELS:
+        if model_id in _AVAILABLE_MODEL_IDS:
+            return model_id
+
+    excluded_terms = ("whisper", "guard", "orpheus", "tts")
+    usable = sorted(
+        model_id for model_id in _AVAILABLE_MODEL_IDS
+        if not any(term in model_id.lower() for term in excluded_terms)
+    )
+    if usable:
+        return usable[0]
+    raise RuntimeError("La clave de Groq no tiene acceso a ningún modelo de texto compatible.")
+
+
 def _groq_chat(system_prompt: str, user_prompt: str, max_tokens: int = 900) -> str:
     """Conexión mediante el cliente oficial de Groq."""
     api_key = _setting("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Falta configurar GROQ_API_KEY en Streamlit Secrets.")
-    target_model = _setting("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    configured_model = _setting("GROQ_MODEL", DEFAULT_GROQ_MODEL)
 
     try:
         client = Groq(api_key=api_key, timeout=35.0, max_retries=2)
+        target_model = _resolve_model(client, configured_model)
         response = client.chat.completions.create(
             model=target_model,
             messages=[
