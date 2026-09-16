@@ -13,7 +13,7 @@ from engine import (
     M, TOOLS, GAPS, ROUTE, tool_public_view, run_engine, recommend_from_gap,
     methodology_qa, next_checks_for_tool, route_info_for_tool, tool_followup_answer
 )
-from llm import diagnose, coach_tool
+from llm import diagnose, coach_tool, ai_is_configured
 from styles import APP_CSS
 from tool_templates import schema_for, empty_answers, render_preview
 from service_router import SERVICE_CATALOG, recommend_services
@@ -228,12 +228,11 @@ def sidebar():
         label_visibility="collapsed",
     )
     st.sidebar.divider()
-    local_model = os.getenv("OLLAMA_MODEL", "").strip()
     st.sidebar.markdown("**Modo de diagnóstico**")
     
-    if local_model:
+    if ai_is_configured():
         st.sidebar.success("IA en la nube activa: Groq")
-        st.sidebar.caption("La conversación se procesa de forma segura a través de los servidores institucionales.")
+        st.sidebar.caption("La conversación se procesa mediante la API configurada para el prototipo.")
         use_ai = st.sidebar.toggle("Usar IA activa", value=True)
     else:
         st.sidebar.warning("Motor local DEMO")
@@ -354,7 +353,7 @@ elif page == "Desarrollar herramienta":
             c_ai, c_help = st.columns([1,2])
             with c_ai:
                 if st.button("Revisar con IA", key=f"coach_{selected_tool_id}_{key}"):
-                    with st.spinner("Revisando con la IA local…"):
+                    with st.spinner("Revisando con la IA en la nube…"):
                         feedback = coach_tool(
                             selected_tool_id,
                             public["name"],
@@ -501,17 +500,17 @@ elif page == "Diagnóstico con IA":
             with st.chat_message("assistant"):
                 st.markdown(answer)
         else:
-            with st.spinner("Analizando tu proyecto con la IA local… La primera respuesta puede tardar un poco mientras el modelo se carga."):
+            with st.spinner("Analizando tu proyecto con la IA en la nube…"):
                 diagnosis = diagnose(prompt, st.session_state.chat, use_ai=use_ai)
             st.session_state.last_diagnosis = diagnosis
 
-            if diagnosis.get("_local_ai_error"):
+            if diagnosis.get("_ai_error"):
                 st.warning(
-                    "La IA local no respondió a tiempo o devolvió un formato inesperado. "
+                    "La IA en la nube no respondió correctamente. "
                     "Ruta CEDIA usó temporalmente el motor metodológico local para no perder tu diagnóstico."
                 )
                 with st.expander("Ver detalle técnico"):
-                    st.code(diagnosis.get("_local_ai_error"))
+                    st.code(diagnosis.get("_ai_error"))
 
             if diagnosis.get("requires_question"):
                 questions = diagnosis.get("questions") or []
