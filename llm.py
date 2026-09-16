@@ -208,3 +208,8 @@ Retorna UNICAMENTE un objeto JSON con este formato:
             m.get("content", "") for m in chat_history[-8:] if m.get("role") == "user"
         )
         return heuristic_diagnosis(latest_user_text, history_text)
+        
+def coach_tool(*args, **kwargs) -> Any:
+    """Función de soporte temporal para compatibilidad con app.py"""
+    return {}
+
