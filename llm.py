@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import os
 import re
-import urllib.error
-import urllib.request
 from typing import Any, Dict, List
+
+from groq import Groq
 
 from engine import GAPS, NON_TOOL_BLOCKERS, heuristic_diagnosis
 
-GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_GROQ_MODEL = "qwen/qwen3-32b"
 
 
@@ -38,47 +37,30 @@ def _blocker_catalog() -> str:
 
 
 def _groq_chat(system_prompt: str, user_prompt: str, max_tokens: int = 900) -> str:
-    """Conexión compatible con la API de chat de Groq."""
+    """Conexión mediante el cliente oficial de Groq."""
     api_key = _setting("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Falta configurar GROQ_API_KEY en Streamlit Secrets.")
     target_model = _setting("GROQ_MODEL", DEFAULT_GROQ_MODEL)
-    
-    payload = json.dumps({
-        "model": target_model,
-        "stream": False,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.3,
-        "max_completion_tokens": max_tokens,
-    }).encode("utf-8")
-    
-    req = urllib.request.Request(
-        GROQ_ENDPOINT,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "User-Agent": "Ruta-CEDIA-Streamlit/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:500]
-        raise RuntimeError(f"Groq respondió HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"No fue posible conectar con Groq: {exc.reason}") from exc
 
-    choices = data.get("choices") or []
-    if not choices:
+    try:
+        client = Groq(api_key=api_key, timeout=35.0, max_retries=2)
+        response = client.chat.completions.create(
+            model=target_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_completion_tokens=max_tokens,
+            stream=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"No fue posible completar la consulta con Groq: {exc}") from exc
+
+    if not response.choices:
         raise RuntimeError("Groq respondió sin alternativas de texto.")
-    content = choices[0].get("message", {}).get("content")
+    content = response.choices[0].message.content
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError("Groq respondió sin contenido utilizable.")
     return content.strip()
