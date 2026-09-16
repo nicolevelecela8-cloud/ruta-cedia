@@ -60,7 +60,9 @@ def _groq_chat(system_prompt: str, user_prompt: str, max_tokens: int = 900) -> s
         data=payload,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Ruta-CEDIA-Streamlit/1.0",
         },
         method="POST",
     )
