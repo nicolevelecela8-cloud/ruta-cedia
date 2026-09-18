@@ -1,0 +1,3 @@
+Ruta CEDIA Innovación 2026
+Versión limpia 1.0
+Arquitectura Groq + motor metodológico v12
